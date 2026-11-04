@@ -171,6 +171,16 @@ you (mode 0700), and the setup wizard offers `~/Claude/ebay-fotos` as a dedicate
 folder. Keep that folder for listing photos only, and pass `deleteAfterUpload` so pictures
 do not stay on disk once eBay has them.
 
+To get listing-ready pictures, `scripts/prepare_photos.py` straightens each photo by its
+camera orientation, crops to the product (or to a manual `--box`), corrects white balance
+and brightness, resizes to 1600 px and strips all metadata such as location and device:
+
+```bash
+pip install pillow opencv-python-headless numpy pillow-heif
+python3 scripts/prepare_photos.py ~/Claude/ebay-fotos ~/Downloads/IMG_*.HEIC
+python3 scripts/prepare_photos.py ~/Claude/ebay-fotos photo.jpg --box 0.2,0.1,0.9,1.0
+```
+
 ### Image URLs and documents
 
 These eight tools are also in the `inventory` family:
