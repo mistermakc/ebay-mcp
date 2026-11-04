@@ -33,6 +33,12 @@ export const uploadImagesInputSchema = z.object({
     .describe(
       'Image files in listing order: JPG, PNG, GIF, BMP, TIFF, WEBP, AVIF, or HEIC, up to 12 MB each',
     ),
+  deleteAfterUpload: z
+    .boolean()
+    .optional()
+    .describe(
+      'Delete the local files once every picture has been uploaded (default false). Nothing is deleted when any upload fails',
+    ),
 });
 
 /** Validates the ebay_upload_image_data input. */
@@ -118,6 +124,14 @@ const uploadedImageSchema = z.object({
 /** Validates the ebay_upload_images output. */
 export const uploadImagesOutputSchema = z.object({
   images: z.array(uploadedImageSchema),
+  deletedFiles: z
+    .array(z.string())
+    .optional()
+    .describe('Local files removed after upload when deleteAfterUpload was set'),
+  deleteErrors: z
+    .array(z.object({ source: z.string(), message: z.string() }))
+    .optional()
+    .describe('Files that were uploaded but could not be removed'),
 });
 
 /** Validates the Media API video payload returned by upload and get tools. */

@@ -1,4 +1,4 @@
-import { writeFile } from 'node:fs/promises';
+import { access, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { CallToolResultSchema } from '@modelcontextprotocol/sdk/types.js';
 import process from 'node:process';
@@ -158,6 +158,39 @@ describe('ebay_upload_images', () => {
     });
     expect(first.isDone()).toBe(true);
     expect(second.isDone()).toBe(true);
+  });
+
+  it('removes the local files after a successful upload when deleteAfterUpload is set', async () => {
+    const photo = path.join(fixture.root, 'delete-me.jpg');
+    await writeFile(photo, JPEG_BYTES);
+    const upload = mockImageUpload('https://i.ebayimg.com/deleted.jpg');
+
+    const uploadResult = await callTool('ebay_upload_images', {
+      paths: [photo],
+      deleteAfterUpload: true,
+    });
+
+    expect(uploadResult.isError).toBe(false);
+    expect(uploadResult.payload).toMatchObject({
+      images: [{ source: photo, imageUrl: 'https://i.ebayimg.com/deleted.jpg' }],
+      deletedFiles: [photo],
+    });
+    expect(upload.isDone()).toBe(true);
+    await expect(access(photo)).rejects.toThrow();
+  });
+
+  it('keeps the local files when an upload fails, even with deleteAfterUpload', async () => {
+    const photo = path.join(fixture.root, 'keep-me.jpg');
+    await writeFile(photo, JPEG_BYTES);
+    nock(MEDIA_HOST).post(`${MEDIA_PATH}/image/create_image_from_file`).reply(500, {});
+
+    const uploadResult = await callTool('ebay_upload_images', {
+      paths: [photo],
+      deleteAfterUpload: true,
+    });
+
+    expect(uploadResult.isError).toBe(true);
+    await expect(access(photo)).resolves.toBeUndefined();
   });
 
   it('refuses files outside the allowed directories without contacting eBay', async () => {

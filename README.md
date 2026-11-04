@@ -153,7 +153,7 @@ files through eBay's Media API and return what the Inventory API needs:
 
 | Tool | What it does |
 | --- | --- |
-| `ebay_upload_images` | Uploads pictures to eBay Picture Services (`createImageFromFile`) and returns the EPS URLs in order for `product.imageUrls` |
+| `ebay_upload_images` | Uploads pictures to eBay Picture Services (`createImageFromFile`) and returns the EPS URLs in order for `product.imageUrls`. With `deleteAfterUpload` it removes the local files once every upload succeeded, so a dedicated photo folder does not keep personal pictures around |
 | `ebay_upload_image_data` | Same as `ebay_upload_images`, but takes the pictures inline as base64, so an assistant can upload photos that are not on the server's machine (for example images attached to a chat). Needs no media directory |
 | `ebay_upload_video` | Runs the video lifecycle (`createVideo` → `uploadVideo` → `getVideo`) and returns the `videoId` for `product.videoIds` |
 | `ebay_get_video` | Re-checks a video that was still `PROCESSING` |

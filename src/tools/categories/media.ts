@@ -21,7 +21,7 @@ import { defineTool } from '@/tools/defineTool.js';
 import type { ToolEntry } from '@/tools/registry.js';
 import type { OutputArgs } from '@/tools/types.js';
 import { decodeInlineImages } from '@/utils/inlineMedia.js';
-import { loadLocalMedia, loadLocalMediaList } from '@/utils/localMedia.js';
+import { loadLocalMedia, loadLocalMediaList, removeUploadedFiles } from '@/utils/localMedia.js';
 import { Effect } from 'effect';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 
@@ -132,7 +132,7 @@ export const mediaEntries: ToolEntry[] = [
 
   defineTool({
     name: 'ebay_upload_images',
-    description: `Upload local pictures to eBay Picture Services and return the EPS image URLs in the same order, ready for product.imageUrls on an inventory item. Uses the Media API (createImageFromFile). Unused images expire after a while; they become permanent once a listing uses them.\n\n${MEDIA_ACCESS_NOTE}`,
+    description: `Upload local pictures to eBay Picture Services and return the EPS image URLs in the same order, ready for product.imageUrls on an inventory item. Set deleteAfterUpload to remove the local files once every upload succeeded. Uses the Media API (createImageFromFile). Unused images expire after a while; they become permanent once a listing uses them.\n\n${MEDIA_ACCESS_NOTE}`,
     inputSchema: uploadImagesInputSchema.shape,
     outputSchema: zodToJsonSchema(uploadImagesOutputSchema, {
       name: 'UploadImagesResponse',
@@ -141,9 +141,15 @@ export const mediaEntries: ToolEntry[] = [
     annotations: { readOnlyHint: false },
     handler: (api, args) =>
       Effect.runPromise(
-        loadLocalMediaList(args.paths, 'image', getMediaAccessConfig()).pipe(
-          Effect.flatMap((files) => api.media.uploadImageFiles(files)),
-        ),
+        Effect.gen(function* () {
+          const files = yield* loadLocalMediaList(args.paths, 'image', getMediaAccessConfig());
+          const result = yield* api.media.uploadImageFiles(files);
+          if (!args.deleteAfterUpload) {
+            return result;
+          }
+          const removal = yield* Effect.promise(() => removeUploadedFiles(files));
+          return { ...result, ...removal };
+        }),
       ),
   }),
   defineTool({

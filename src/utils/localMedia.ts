@@ -1,4 +1,4 @@
-import { readFile, realpath, stat } from 'node:fs/promises';
+import { readFile, realpath, stat, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { MEDIA_DIRS_ENV, MEDIA_ROOT_ENV, type MediaAccessConfig } from '@/config/mediaAccess.js';
 import { Data, Effect } from 'effect';
@@ -317,3 +317,36 @@ export const loadLocalMediaList = (
   access: MediaAccessConfig,
 ): Effect.Effect<LocalMediaFile[], LocalMediaError> =>
   Effect.forEach(sources, (source) => loadLocalMedia(source, kind, access));
+
+/** Outcome of removing uploaded files from disk. */
+export interface RemovedFilesResult {
+  /** Caller references of the files that were deleted. */
+  readonly deletedFiles: string[];
+  /** Files that could not be deleted, with the reason. */
+  readonly deleteErrors?: { source: string; message: string }[];
+}
+
+/**
+ * Deletes files that were validated by {@link loadLocalMedia} and uploaded.
+ * Only the resolved real paths are touched, so the allowed-directory check that
+ * guarded the read also bounds the delete. Failures are reported, not thrown,
+ * because the upload itself already succeeded.
+ */
+export const removeUploadedFiles = async (
+  files: readonly LocalMediaFile[],
+): Promise<RemovedFilesResult> => {
+  const deletedFiles: string[] = [];
+  const deleteErrors: { source: string; message: string }[] = [];
+  for (const file of new Map(files.map((entry) => [entry.path, entry])).values()) {
+    try {
+      await unlink(file.path);
+      deletedFiles.push(file.source);
+    } catch (error) {
+      deleteErrors.push({
+        source: file.source,
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+  return deleteErrors.length > 0 ? { deletedFiles, deleteErrors } : { deletedFiles };
+};
