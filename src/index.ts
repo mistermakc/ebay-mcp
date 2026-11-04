@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { validateEnvironmentConfig } from '@/config/environment.js';
+import { ensureMediaDirs } from '@/config/mediaAccess.js';
 import { createEbayMcpRuntime, type EbayMcpRuntime } from '@/mcp/runtime.js';
 import { runDiagnostics } from '@/scripts/diagnostics.js';
 import { runSetup } from '@/scripts/setup.js';
@@ -89,6 +90,15 @@ class EbayMcpServer {
     // Log informational notices (e.g. proxy auth mode)
     validation.infos.forEach((notice) => {
       serverLogger.info(notice);
+    });
+
+    // Create configured photo folders on first start (private to this user)
+    const mediaDirs = ensureMediaDirs();
+    mediaDirs.created.forEach((dir) => {
+      serverLogger.info(`Created media directory ${dir}`);
+    });
+    mediaDirs.failed.forEach(({ dir, message }) => {
+      serverLogger.warn(`Could not create media directory ${dir}: ${message}`);
     });
 
     // Log warnings

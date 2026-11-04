@@ -166,6 +166,11 @@ check; anything outside the allowed directories is refused before any upload. Su
 JPG, PNG, GIF, BMP, TIFF, WEBP, AVIF, HEIC up to 12 MB; MP4/MOV up to 150 MB. Unused
 uploads expire on eBay's side; they become permanent once a listing uses them.
 
+Configured folders that do not exist yet are created on server start, readable only by
+you (mode 0700), and the setup wizard offers `~/Claude/ebay-fotos` as a dedicated photo
+folder. Keep that folder for listing photos only, and pass `deleteAfterUpload` so pictures
+do not stay on disk once eBay has them.
+
 ### Image URLs and documents
 
 These eight tools are also in the `inventory` family:

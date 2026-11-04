@@ -24,6 +24,7 @@
 /* eslint-disable n/no-process-exit */
 
 import prompts from 'prompts';
+import { ensureMediaDirs, getDefaultMediaDir, getMediaAccessConfig } from '@/config/mediaAccess.js';
 import chalk from 'chalk';
 import { Effect, Either } from 'effect';
 import { writeFileSync } from 'fs';
@@ -201,6 +202,13 @@ EBAY_CONTENT_LANGUAGE=${config.EBAY_CONTENT_LANGUAGE || ''}
 EBAY_USER_REFRESH_TOKEN=${config.EBAY_USER_REFRESH_TOKEN || ''}
 EBAY_USER_ACCESS_TOKEN=${config.EBAY_USER_ACCESS_TOKEN || ''}
 EBAY_APP_ACCESS_TOKEN=${config.EBAY_APP_ACCESS_TOKEN || ''}
+
+# ═══════════════════════════════════════════════════════════════════
+# Local photo uploads (Optional)
+# ═══════════════════════════════════════════════════════════════════
+# Folder(s) the media tools may read. Missing folders are created on start,
+# readable only by you. Leave empty to keep local file access off.
+EBAY_MCP_MEDIA_DIRS=${config.EBAY_MCP_MEDIA_DIRS || ''}
 
 # ═══════════════════════════════════════════════════════════════════
 # Logging (Optional)
@@ -834,6 +842,16 @@ async function runInteractiveSetup(args: CLIArgs) {
     }
   }
 
+  // Photo folder for local image uploads (opt-in, created private on first start)
+  const mediaFolder = await prompts({
+    type: 'text',
+    name: 'dir',
+    message:
+      'Folder for listing photos the server may upload (leave empty to keep local file access off):',
+    initial: existingConfig.EBAY_MCP_MEDIA_DIRS ?? getDefaultMediaDir(),
+  });
+  const mediaDirs = String(mediaFolder.dir ?? '').trim();
+
   // Build configuration object
   const config: Record<string, string> = {
     EBAY_CLIENT_ID: credentials.EBAY_CLIENT_ID,
@@ -846,7 +864,18 @@ async function runInteractiveSetup(args: CLIArgs) {
     EBAY_USER_ACCESS_TOKEN: '',
     EBAY_APP_ACCESS_TOKEN: '',
     LOG_LEVEL: existingConfig.LOG_LEVEL || 'info',
+    EBAY_MCP_MEDIA_DIRS: mediaDirs,
   };
+
+  if (mediaDirs) {
+    const { created, failed } = ensureMediaDirs(
+      getMediaAccessConfig({ EBAY_MCP_MEDIA_DIRS: mediaDirs }),
+    );
+    created.forEach((dir) => console.log(chalk.green(`✓ Created photo folder ${dir}`)));
+    failed.forEach(({ dir, message }) =>
+      console.log(chalk.yellow(`⚠️  Could not create ${dir}: ${message}`)),
+    );
+  }
 
   // Validate and generate tokens
   if (refreshToken) {

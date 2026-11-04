@@ -1,3 +1,5 @@
+import { mkdirSync, statSync } from 'node:fs';
+import { homedir } from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
 
@@ -65,4 +67,44 @@ export const getMediaAccessConfig = (env: NodeJS.ProcessEnv = process.env): Medi
   }
 
   return { allowedDirs, mediaRoot, errors };
+};
+
+/** Default photo folder suggested by the setup wizard (`~/Claude/ebay-fotos`). */
+export const getDefaultMediaDir = (): string => path.join(homedir(), 'Claude', 'ebay-fotos');
+
+/** Result of {@link ensureMediaDirs}. */
+export interface EnsureMediaDirsResult {
+  /** Directories that did not exist and were created. */
+  readonly created: string[];
+  /** Directories that could not be created, with the reason. */
+  readonly failed: { dir: string; message: string }[];
+}
+
+/**
+ * Creates every configured media directory that does not exist yet, private to
+ * the current user (mode 0700), so a fresh setup works without a manual
+ * `mkdir`. Existing directories are left exactly as they are. Nothing happens
+ * when no media directory is configured, which keeps local file access opt-in.
+ *
+ * @param access - Parsed media allowlist; defaults to the current environment.
+ * @returns The directories created and any that failed.
+ */
+export const ensureMediaDirs = (
+  access: MediaAccessConfig = getMediaAccessConfig(),
+): EnsureMediaDirsResult => {
+  const created: string[] = [];
+  const failed: { dir: string; message: string }[] = [];
+  for (const dir of access.allowedDirs) {
+    try {
+      statSync(dir);
+    } catch {
+      try {
+        mkdirSync(dir, { recursive: true, mode: 0o700 });
+        created.push(dir);
+      } catch (error) {
+        failed.push({ dir, message: error instanceof Error ? error.message : String(error) });
+      }
+    }
+  }
+  return { created, failed };
 };
