@@ -13,6 +13,7 @@ For every input image:
 Usage:
   python3 prepare_photos.py OUTPUT_DIR IMAGE [IMAGE ...]
   python3 prepare_photos.py OUTPUT_DIR IMAGE --no-crop     # keep the full frame
+  python3 prepare_photos.py OUTPUT_DIR IMAGE --rotate 90   # turn clockwise
   python3 prepare_photos.py OUTPUT_DIR IMAGE --box 0.2,0.1,0.9,1.0
       # manual crop as fractions of width/height (left, top, right, bottom),
       # for cluttered shots where the automatic crop keeps too much
@@ -40,7 +41,10 @@ except ImportError:
 MAX_SIDE = 1600
 WORK_SIDE = 640  # analysis resolution
 MARGIN = 0.12  # crop margin around the product, relative to its size
-TARGET_BG = 235  # background brightness after correction (0..255)
+TARGET_BG = 222  # background brightness after correction (0..255)
+MIN_GAMMA = 0.82  # strongest allowed brightness lift (1.0 = none)
+WB_STRENGTH = 0.5  # 0 = keep original colour cast, 1 = fully neutral background
+SATURATION = 1.08  # mild saturation boost after the lift
 
 
 def load_upright(path: Path) -> Image.Image:
@@ -135,23 +139,24 @@ def crop_to_product(img: Image.Image) -> Image.Image:
 
 
 def correct_colour(img: Image.Image) -> Image.Image:
-    """Neutral white balance and bright, clean background without clipping the product."""
+    """Gentle correction: half-way white balance, a modest brightness lift and a
+    small saturation boost. Deliberately conservative so colours stay natural and
+    dark products keep their depth instead of turning grey."""
     arr = np.asarray(img).astype(np.float32)
     small = cv2.resize(arr, (0, 0), fx=WORK_SIDE / max(img.size), fy=WORK_SIDE / max(img.size))
     bg = background_colour(small.astype(np.uint8)).astype(np.float32)
-    # White balance: make the desk neutral grey.
-    gains = bg.mean() / np.maximum(bg, 1)
+    # White balance: move the desk only half-way towards neutral grey.
+    gains = 1 + WB_STRENGTH * (bg.mean() / np.maximum(bg, 1) - 1)
     arr *= gains
-    # Brightness: lift the desk towards TARGET_BG with a gamma curve (protects highlights).
+    # Brightness: lift the desk towards TARGET_BG, but never by much.
     level = max(1.0, float(np.clip(bg.mean() * gains.mean(), 1, 254)))
     gamma = np.log(TARGET_BG / 255) / np.log(level / 255)
-    gamma = float(np.clip(gamma, 0.55, 1.25))
+    gamma = float(np.clip(gamma, MIN_GAMMA, 1.0))
     arr = 255 * (np.clip(arr, 0, 255) / 255) ** gamma
-    # Gentle contrast via CLAHE on lightness only.
-    lab = cv2.cvtColor(np.clip(arr, 0, 255).astype(np.uint8), cv2.COLOR_RGB2LAB)
-    clahe = cv2.createCLAHE(clipLimit=1.6, tileGridSize=(8, 8))
-    lab[..., 0] = clahe.apply(lab[..., 0])
-    return Image.fromarray(cv2.cvtColor(lab, cv2.COLOR_LAB2RGB))
+    # Restore the saturation a brightness lift takes away.
+    hsv = cv2.cvtColor(np.clip(arr, 0, 255).astype(np.uint8), cv2.COLOR_RGB2HSV).astype(np.float32)
+    hsv[..., 1] = np.clip(hsv[..., 1] * SATURATION, 0, 255)
+    return Image.fromarray(cv2.cvtColor(hsv.astype(np.uint8), cv2.COLOR_HSV2RGB))
 
 
 def save_clean(img: Image.Image, out: Path) -> None:
@@ -172,6 +177,13 @@ def main() -> int:
         "--box",
         help="manual crop left,top,right,bottom as fractions 0..1 (applied to every image given)",
     )
+    parser.add_argument(
+        "--rotate",
+        type=int,
+        choices=[0, 90, 180, 270],
+        default=0,
+        help="rotate clockwise after cropping, for products photographed lying sideways",
+    )
     args = parser.parse_args()
     args.output_dir.mkdir(parents=True, exist_ok=True)
     for path in args.images:
@@ -183,6 +195,8 @@ def main() -> int:
             )
         elif not args.no_crop:
             img = crop_to_product(img)
+        if args.rotate:
+            img = img.rotate(-args.rotate, expand=True)
         img = correct_colour(img)
         out = args.output_dir / f"{path.stem}.jpg"
         save_clean(img, out)
